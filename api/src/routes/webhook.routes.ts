@@ -1,5 +1,5 @@
 import { FastifyInstance } from "fastify";
-import { webhookController } from "../modules/webhook/webhook.controller.js";
+import { handleWebhook } from "../modules/webhook/webhook.controller.js";
 
 export async function registerWebhookRoutes(app: FastifyInstance) {
   app.post(
@@ -12,6 +12,6 @@ export async function registerWebhookRoutes(app: FastifyInstance) {
         }
       }
     },
-    webhookController.handleWebhook
+    handleWebhook
   );
 }

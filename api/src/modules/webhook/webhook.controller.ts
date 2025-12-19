@@ -1,46 +1,53 @@
 import { FastifyRequest, FastifyReply } from "fastify";
-import { getVerifier } from "../../providers/verifier.factory.js";
 import { webhookService } from "./webhook.service.js";
-import { config } from "../../config/index.js";
+import { verifierFactory } from "../../providers/verifier.factory.js";
 import { logger } from "../../infra/logger.js";
 
-export class WebhookController {
-  async handleWebhook(
-    request: FastifyRequest,
-    reply: FastifyReply
-  ) {
-    const { provider, tenantId } = request.params as {
-      provider: string;
-      tenantId: string;
-    };
+export async function handleWebhook(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  const { provider, tenantId } = request.params as {
+    provider: string;
+    tenantId: string;
+  };
 
-    const rawBody = request.body as Buffer;
+  // 🔍 HARD PROOF LOG
+  logger.info(
+    {
+      provider,
+      tenantId,
+      rawBodyExists: !!request.rawBody,
+      isRawBodyBuffer: Buffer.isBuffer(request.rawBody),
+      bodyType: typeof request.body
+    },
+    "Webhook request received"
+  );
 
-    let normalizedEvent;
-
-    try {
-      const verifier = getVerifier(provider);
-
-      normalizedEvent = verifier.verify({
-        rawBody,
-        headers: request.headers,
-        secret: config.STRIPE_SIGNING_SECRET // later: per-tenant secret
-      });
-    } catch (err) {
-      logger.warn({ err, provider, tenantId }, "Webhook verification failed");
-      return reply.status(400).send({ error: "Invalid webhook" });
+  try {
+    const verifier = verifierFactory.get(provider);
+    if (!request.rawBody || !Buffer.isBuffer(request.rawBody)) {
+      logger.error("Raw body missing or invalid");
+      return reply.code(400).send({ error: "Invalid webhook payload" });
     }
+
+    const verified = verifier.verify({
+      rawBody: request.rawBody,
+      headers: request.headers,
+      secret: "test_webhook_secret" // later from DB
+    });
 
     await webhookService.ingestEvent({
       tenantId,
       provider,
-      eventId: normalizedEvent.eventId,
-      payload: normalizedEvent.payload,
-      eventType: normalizedEvent.eventType
+      eventId: verified.eventId,
+      eventType: verified.eventType,
+      payload: verified.payload
     });
 
-    return reply.status(200).send({ received: true });
+    return reply.code(202).send({ status: "accepted" });
+  } catch (err) {
+    logger.warn({ err }, "Webhook verification failed");
+    return reply.code(400).send({ error: "Invalid webhook" });
   }
 }
-
-export const webhookController = new WebhookController();

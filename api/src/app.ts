@@ -1,8 +1,9 @@
 import Fastify, { FastifyInstance } from "fastify";
 import rateLimit from "@fastify/rate-limit";
+import rawBody from "fastify-raw-body";
 
 import { registerWebhookRoutes } from "./routes/webhook.routes.js";
-import { config } from "./config/index.js";
+// import { config } from "./config/index.js";
 import { fastifyLogger } from "./infra/logger.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -10,6 +11,14 @@ export async function buildApp(): Promise<FastifyInstance> {
         logger: fastifyLogger,
         trustProxy: true
     });
+
+    await app.register(rawBody, {
+        field: "rawBody",
+        global: true,
+        encoding: false,
+        runFirst: true
+    });
+
 
     // --------------------
     // Global Plugins
