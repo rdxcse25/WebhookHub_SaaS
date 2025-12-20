@@ -1,0 +1,18 @@
+{
+  "name": "webhookhub-db",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "migrate": "node dist/migrate.js"
+  },
+  "dependencies": {
+    "pg": "^8.11.5"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.3",
+    "@types/pg": "^8.16.0",
+    "typescript": "^5.4.0"
+  }
+}

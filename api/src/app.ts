@@ -5,6 +5,7 @@ import rawBody from "fastify-raw-body";
 import { registerWebhookRoutes } from "./routes/webhook.routes.js";
 // import { config } from "./config/index.js";
 import { fastifyLogger } from "./infra/logger.js";
+import { registerRoutes } from "./routes/index.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
     const app = Fastify({
@@ -38,9 +39,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     // --------------------
     // Routes
     // --------------------
-    await app.register(registerWebhookRoutes, {
-        prefix: "/webhooks"
-    });
+    await registerRoutes(app);
 
     return app;
 }
