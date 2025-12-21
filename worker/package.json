@@ -12,7 +12,8 @@
     "axios": "^1.6.7",
     "kafkajs": "^2.2.4",
     "pg": "^8.11.5",
-    "pino": "^8.19.0"
+    "pino": "^8.19.0",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",
