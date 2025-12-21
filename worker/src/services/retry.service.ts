@@ -1,49 +1,42 @@
 import { db } from "../infra/db.js";
 import { logger } from "../infra/logger.js";
+import { v4 as uuidv4 } from "uuid";
+import { config } from "../config/env.js";
 
-/**
- * Retry configuration
- */
-const MAX_RETRIES = 5;
-
-interface RetryDecisionInput {
-  tenantId: string;
-  provider: string;
-  eventId: string;
+interface RetryDeliveryInput {
+  deliveryId: string;
   errorReason: string;
 }
 
 class RetryService {
   /**
-   * Decide whether event should be retried or sent to DLQ.
+   * Decide whether a DELIVERY should be retried or moved to DLQ
    *
    * Returns:
-   * - true  → retry (Kafka will re-deliver)
-   * - false → stop retrying (offset can be committed)
+   * - true  → retry (throw → Kafka will redeliver)
+   * - false → stop retrying (commit offset)
    */
-  async shouldRetry(
-    input: RetryDecisionInput
+  async shouldRetryDelivery(
+    input: RetryDeliveryInput
   ): Promise<boolean> {
-    const { tenantId, provider, eventId, errorReason } = input;
+    const { deliveryId, errorReason } = input;
 
     /**
-     * 1️⃣ Fetch retry count safely
+     * 1️⃣ Fetch delivery retry count
      */
     const res = await db.query(
       `
       SELECT retry_count
-      FROM events_state
-      WHERE tenant_id = $1
-        AND provider = $2
-        AND event_id = $3
+      FROM event_deliveries
+      WHERE id = $1
       `,
-      [tenantId, provider, eventId]
+      [deliveryId]
     );
 
     if (res.rowCount === 0) {
       logger.warn(
-        { tenantId, provider, eventId },
-        "⚠️ Retry decision skipped — event state not found"
+        { deliveryId },
+        "⚠️ Retry skipped — delivery not found"
       );
       return false;
     }
@@ -51,18 +44,16 @@ class RetryService {
     const retryCount: number = res.rows[0].retry_count;
 
     /**
-     * 2️⃣ Check retry limit
+     * 2️⃣ Max retries reached → DLQ
      */
-    if (retryCount >= MAX_RETRIES) {
+    if (retryCount >= config.MAX_RETRIES) {
       logger.error(
-        { tenantId, provider, eventId, retryCount },
-        "☠️ Max retries exceeded — moving to DLQ"
+        { deliveryId, retryCount },
+        "☠️ Max retries exceeded — moving delivery to DLQ"
       );
 
-      await this.moveToDLQ(
-        tenantId,
-        provider,
-        eventId,
+      await this.moveDeliveryToDLQ(
+        deliveryId,
         errorReason
       );
 
@@ -74,50 +65,67 @@ class RetryService {
      */
     await db.query(
       `
-      UPDATE events_state
-      SET retry_count = retry_count + 1,
+        UPDATE event_deliveries
+        SET
+          retry_count = retry_count + 1,
+          last_error = $2,
+          status = 'FAILED',
           updated_at = NOW()
-      WHERE tenant_id = $1
-        AND provider = $2
-        AND event_id = $3
+        WHERE id = $1
       `,
-      [tenantId, provider, eventId]
+      [
+        deliveryId,
+        errorReason
+      ]
     );
 
     logger.warn(
-      { tenantId, provider, eventId, retryCount: retryCount + 1 },
-      "🔁 Retrying event via Kafka"
+      { deliveryId, retryCount: retryCount + 1 },
+      "🔁 Retrying delivery via Kafka"
     );
 
     /**
-     * Returning true tells consumer to THROW
-     * Kafka will retry automatically
+     * Kafka retry via throw
      */
     return true;
   }
 
   /**
-   * Move event to DLQ table
+   * Move DELIVERY to DLQ
    */
-  private async moveToDLQ(
-    tenantId: string,
-    provider: string,
-    eventId: string,
+  async moveDeliveryToDLQ(
+    deliveryId: string,
     reason: string
   ): Promise<void> {
-    const payloadRes = await db.query(
+    /**
+     * Fetch full delivery + payload
+     */
+    const res = await db.query(
       `
-      SELECT payload
-      FROM events_raw
-      WHERE tenant_id = $1
-        AND provider = $2
-        AND event_id = $3
+      SELECT
+        d.tenant_id,
+        d.provider,
+        d.event_id,
+        r.payload
+      FROM event_deliveries d
+      JOIN events_raw r
+        ON r.event_id = d.event_id
+       AND r.provider = d.provider
+       AND r.tenant_id = d.tenant_id
+      WHERE d.id = $1
       `,
-      [tenantId, provider, eventId]
+      [deliveryId]
     );
 
-    const payload = payloadRes.rows[0]?.payload ?? null;
+    if (res.rowCount === 0) return;
 
+    const { tenant_id, provider, event_id, payload } =
+      res.rows[0];
+
+    /**
+     * Insert into DLQ
+     */
+    const uuid_id = uuidv4();
     await db.query(
       `
       INSERT INTO events_dlq (
@@ -129,32 +137,28 @@ class RetryService {
         failure_reason
       )
       VALUES (
-        gen_random_uuid(),
-        $1,
-        $2,
-        $3,
-        $4,
-        $5
+        $1, $2, $3, $4, $5, $6
       )
       `,
-      [tenantId, provider, eventId, payload, reason]
+      [uuid_id, tenant_id, provider, event_id, payload, reason]
     );
 
+    /**
+     * Mark delivery as DLQ
+     */
     await db.query(
       `
-      UPDATE events_state
-      SET status = 'FAILED',
+      UPDATE event_deliveries
+      SET status = 'DLQ',
           updated_at = NOW()
-      WHERE tenant_id = $1
-        AND provider = $2
-        AND event_id = $3
+      WHERE id = $1
       `,
-      [tenantId, provider, eventId]
+      [deliveryId]
     );
 
     logger.fatal(
-      { tenantId, provider, eventId, reason },
-      "🪦 Event moved to DLQ"
+      { deliveryId, reason },
+      "🪦 Delivery moved to DLQ"
     );
   }
 }

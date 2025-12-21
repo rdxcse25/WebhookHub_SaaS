@@ -17,6 +17,8 @@ interface DeliverEventInput {
 
   targetUrl: string;
   secret: string;
+
+  skipEventLock?: boolean;
 }
 
 class DeliveryService {
@@ -39,18 +41,20 @@ class DeliveryService {
     /**
      * 1️⃣ Acquire idempotency lock
      */
-    const locked = await markProcessing(
-      tenantId,
-      provider,
-      eventId
-    );
-
-    if (!locked) {
-      logger.warn(
-        { tenantId, provider, eventId },
-        "⚠️ Event already processed or in-flight"
+    if (!input.skipEventLock) {
+      const locked = await markProcessing(
+        tenantId,
+        provider,
+        eventId
       );
-      return;
+
+      if (!locked) {
+        logger.warn(
+          { eventId },
+          "⚠️ Event already processed or in-flight"
+        );
+        return;
+      }
     }
 
     /**

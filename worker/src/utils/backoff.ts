@@ -1,3 +1,13 @@
-export function backoff(retryCount: number): number {
-  return Math.min(1000 * Math.pow(2, retryCount), 30000);
+export function calculateBackoffMs(
+  retryCount: number
+): number {
+  const base = 1000; // 1s
+  const max = 5 * 60 * 1000; // 5 minutes
+
+  const delay = Math.min(
+    base * Math.pow(2, retryCount),
+    max
+  );
+
+  return delay;
 }
