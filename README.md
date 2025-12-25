@@ -36,6 +36,19 @@ WebhookHub solves these problems by offering a **robust, scalable, and fault-tol
 
 ---
 
+### 🌳 Repository Branching Strategy
+
+WebhookHub follows a trunk-based, environment-aligned branching strategy designed for fast iteration, safe deployments, and clear ownership as the system scales.
+
+📌 Branch Overview
+* main        → Production-ready code
+* develop     → Active development, integration & testing
+* feature/*   → New features or improvements
+* fix/*       → Bug fixes
+* hotfix/*    → Critical production fixes
+
+---
+
 ## 🧱 System Architecture
 
 ### High-Level Architecture
