@@ -24,15 +24,15 @@ WebhookHub solves these problems by offering a **robust, scalable, and fault-tol
 
 ## ✨ Key Features
 
-* ✅ Multi-tenant webhook ingestion
-* 🔐 Provider signature verification (Stripe-style)
-* ♻️ Idempotent event ingestion
-* 📤 Kafka-based event fan-out
-* 📦 Per-subscription delivery tracking
-* 🔁 Exponential retry with backoff
-* ☠️ Dead Letter Queue (DLQ)
-* 🧵 Horizontal worker scalability
-* 🐳 Fully Dockerized local setup
+* Multi-tenant webhook ingestion
+* Provider signature verification (Stripe-style)
+* Idempotent event ingestion
+* Kafka-based event fan-out
+* Per-subscription delivery tracking
+* Exponential retry with backoff
+* Dead Letter Queue (DLQ)
+* Horizontal worker scalability
+* Fully Dockerized local setup
 
 ---
 
